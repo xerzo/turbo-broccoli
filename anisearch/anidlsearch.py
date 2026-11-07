@@ -360,7 +360,7 @@ def format_anime_info(anime):
 
 # ================= SEND RESULT ================= #
 
-async def send_anime_result(message, anime, is_random=False):
+async def send_anime_result(message, anime, is_random=False, thread_id=None):
     image_url = get_image_url(anime)
     info_text = format_anime_info(anime)
     
@@ -374,15 +374,26 @@ async def send_anime_result(message, anime, is_random=False):
     reply_markup = InlineKeyboardMarkup(keyboard) if keyboard else None
     chat_id = message.chat.id
     
+    # Resolve thread ID for Telegram forum topics
+    if thread_id is None:
+        thread_id = getattr(message, "message_thread_id", None)
+        if not thread_id and FORUM_TOPIC_CHAT_ID and chat_id == FORUM_TOPIC_CHAT_ID:
+            thread_id = FORUM_TOPIC_THREAD_ID or None
+
+    send_kwargs = {}
+    if thread_id:
+        send_kwargs["message_thread_id"] = thread_id
+
     if image_url:
         try:
-            logger.info(f"Sending image: {image_url}")
+            logger.info(f"Sending image: {image_url} (chat_id={chat_id}, thread_id={thread_id})")
             await app.send_photo(
                 chat_id=chat_id,
                 photo=image_url,
                 caption=info_text,
                 parse_mode=ParseMode.HTML,
-                reply_markup=reply_markup
+                reply_markup=reply_markup,
+                **send_kwargs
             )
             return
         except Exception as e:
@@ -395,7 +406,8 @@ async def send_anime_result(message, anime, is_random=False):
         text=info_text,
         parse_mode=ParseMode.HTML,
         reply_markup=reply_markup,
-        link_preview_options=LinkPreviewOptions(is_disabled=False)
+        link_preview_options=LinkPreviewOptions(is_disabled=False),
+        **send_kwargs
     )
 
 
@@ -492,10 +504,21 @@ def build_search_keyboard(results, page, query):
 # ================= SEARCH HANDLERS (with force sub) ================= #
 
 async def handle_search(message, query):
+    # Resolve thread ID for Telegram forum topics
+    thread_id = getattr(message, "message_thread_id", None)
+    if not thread_id and FORUM_TOPIC_CHAT_ID and message.chat.id == FORUM_TOPIC_CHAT_ID:
+        thread_id = FORUM_TOPIC_THREAD_ID or None
+
+    reply_kwargs = {"message_thread_id": thread_id} if thread_id else {}
+
     result = await asyncio.to_thread(search_anime, query)
     
     if not result or "results" not in result or not result["results"]:
-        await message.reply_text(f"❌ No results found for '<code>{escape(query)}</code>'.", parse_mode=ParseMode.HTML)
+        await message.reply_text(
+            f"❌ No results found for '<code>{escape(query)}</code>'.",
+            parse_mode=ParseMode.HTML,
+            **reply_kwargs
+        )
         return
     
     results = result["results"]
@@ -507,7 +530,7 @@ async def handle_search(message, query):
             logger.info(f"Images structure: {results[0]['images']}")
     
     if len(results) == 1:
-        await send_anime_result(message, results[0])
+        await send_anime_result(message, results[0], thread_id=thread_id)
         return
     
     total = len(results)
@@ -518,17 +541,20 @@ async def handle_search(message, query):
     selection_msg = await message.reply_text(
         text,
         reply_markup=build_search_keyboard(results, 0, query),
-        parse_mode=ParseMode.HTML
+        parse_mode=ParseMode.HTML,
+        **reply_kwargs
     )
     
     app.search_results[selection_msg.id] = {
         "query": query,
         "results": results,
-        "page": 0
+        "page": 0,
+        "thread_id": thread_id
     }
     
     app.selection_messages[selection_msg.id] = {
-        "chat_id": selection_msg.chat.id
+        "chat_id": selection_msg.chat.id,
+        "thread_id": thread_id
     }
     
     asyncio.create_task(
@@ -623,12 +649,19 @@ async def callback_handler(client, callback_query):
     index = int(data.split("_")[1])
 
     search_data = app.search_results.get(callback_query.message.id)
+    thread_id = None
     if isinstance(search_data, dict):
         results = search_data.get("results", [])
+        thread_id = search_data.get("thread_id")
     elif isinstance(search_data, list):
         results = search_data
     else:
         results = []
+
+    if thread_id is None and callback_query.message:
+        thread_id = getattr(callback_query.message, "message_thread_id", None)
+        if not thread_id and FORUM_TOPIC_CHAT_ID and callback_query.message.chat.id == FORUM_TOPIC_CHAT_ID:
+            thread_id = FORUM_TOPIC_THREAD_ID or None
 
     if 0 <= index < len(results):
         await callback_query.answer("Loading...")
@@ -641,7 +674,7 @@ async def callback_handler(client, callback_query):
         app.search_results.pop(callback_query.message.id, None)
         app.selection_messages.pop(callback_query.message.id, None)
 
-        await send_anime_result(callback_query.message, results[index])
+        await send_anime_result(callback_query.message, results[index], thread_id=thread_id)
     else:
         await callback_query.answer("This menu has expired.", show_alert=True)
 
@@ -718,7 +751,16 @@ async def fetch_random_anime():
 async def random_anime_command(client, message):
     if not await check_force_sub(client, message):
         return
-    status = await message.reply_text("🎲 <i>Rolling a random anime recommendation...</i>", parse_mode=ParseMode.HTML)
+    thread_id = getattr(message, "message_thread_id", None)
+    if not thread_id and FORUM_TOPIC_CHAT_ID and message.chat.id == FORUM_TOPIC_CHAT_ID:
+        thread_id = FORUM_TOPIC_THREAD_ID or None
+    reply_kwargs = {"message_thread_id": thread_id} if thread_id else {}
+
+    status = await message.reply_text(
+        "🎲 <i>Rolling a random anime recommendation...</i>",
+        parse_mode=ParseMode.HTML,
+        **reply_kwargs
+    )
     anime = await fetch_random_anime()
     if not anime:
         await status.edit_text("❌ Could not fetch a random anime. Please try again.")
@@ -727,7 +769,7 @@ async def random_anime_command(client, message):
         await status.delete()
     except Exception:
         pass
-    await send_anime_result(message, anime, is_random=True)
+    await send_anime_result(message, anime, is_random=True, thread_id=thread_id)
 
 
 @app.on_callback_query(filters.regex(r"^random_anime$"))
@@ -741,7 +783,10 @@ async def random_anime_callback(client, callback_query):
         await callback_query.message.delete()
     except Exception:
         pass
-    await send_anime_result(callback_query.message, anime, is_random=True)
+    thread_id = getattr(callback_query.message, "message_thread_id", None)
+    if not thread_id and FORUM_TOPIC_CHAT_ID and callback_query.message.chat.id == FORUM_TOPIC_CHAT_ID:
+        thread_id = FORUM_TOPIC_THREAD_ID or None
+    await send_anime_result(callback_query.message, anime, is_random=True, thread_id=thread_id)
 
 
 # ================= TELEGRAM INLINE MODE ================= #

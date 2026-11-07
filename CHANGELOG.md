@@ -59,6 +59,7 @@ Refactored all three services (`tg-comment`, `anisearch`, `mongosync`) to decoup
 - **Deprecated `disable_web_page_preview` Warning** — Replaced deprecated `disable_web_page_preview=False` with modern `link_preview_options=LinkPreviewOptions(is_disabled=False)` in `send_anime_result` and `inline_query_handler` in `anisearch/anidlsearch.py`.
 - **Restricted Admin Command Execution to Private Chats** — Ensured `/stats`, `/admin`, and `/broadcast` commands and their interactive callbacks can only be executed in private chat. If invoked in a group or supergroup, the bot prevents exposing server metrics and admin controls, redirecting the admin to private chat.
 - **Docker Bind-Mount Directory Collision & 0-Byte DBM Initialization** — Migrated single-file volume mount in `docker-compose.yml` to a dedicated `./tg-comment/data:/app/tg-comment/data` directory mount. Enhanced `FeedBot.__init__` in `tg-comment/anidl.py` to auto-detect 0-byte files and initialize them with flag `'n'`, resolving `dbm.error: db type could not be determined`.
+- **Forum Topic Thread ID Retention on Result Postings** — Tracked and propagated `message_thread_id` across search sessions, selection callbacks, and random anime cards in `anisearch/anidlsearch.py`, ensuring results clicked within a forum topic thread post directly into that thread instead of leaking to the General chat.
 
 ### Removed
 - **Untracked Sensitive Configs** — Removed live `tg-comment/config.json` from git tracking and ignored all `**/config.json` in `.gitignore`.
