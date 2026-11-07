@@ -415,6 +415,12 @@ async def start_command(client, message):
     # Force sub check (honors enable_force_sub and group settings)
     if not await check_force_sub(client, message):
         return
+
+    # Deep-link check: /start admin opened by admin in PM
+    if len(message.command) > 1 and message.command[1] == "admin" and user_id in ADMIN_IDS:
+        text = await build_stats_text()
+        await message.reply_text(text, parse_mode=ParseMode.HTML, reply_markup=build_stats_keyboard())
+        return
     
     first_name = escape(message.from_user.first_name or "there")
     
@@ -913,6 +919,18 @@ async def build_stats_text():
 
 @app.on_message(filters.command(["stats", "admin"]) & filters.user(ADMIN_IDS))
 async def stats_command(client, message):
+    if message.chat.type != ChatType.PRIVATE:
+        bot_user = app.me if app.me else await app.get_me()
+        bot_username = bot_user.username or ""
+        pm_url = f"https://t.me/{bot_username}?start=admin" if bot_username else None
+        keyboard = InlineKeyboardMarkup([[InlineKeyboardButton("💬 Open in Private Chat", url=pm_url)]]) if pm_url else None
+        await message.reply_text(
+            "🔒 <b>Admin tools are restricted to private chat only.</b>",
+            parse_mode=ParseMode.HTML,
+            reply_markup=keyboard
+        )
+        return
+
     text = await build_stats_text()
     await message.reply_text(text, parse_mode=ParseMode.HTML, reply_markup=build_stats_keyboard())
 
@@ -922,6 +940,10 @@ async def admin_callback_handler(client, callback_query):
     user_id = callback_query.from_user.id if callback_query.from_user else 0
     if user_id not in ADMIN_IDS:
         await callback_query.answer("⛔ Admins only!", show_alert=True)
+        return
+
+    if callback_query.message and callback_query.message.chat.type != ChatType.PRIVATE:
+        await callback_query.answer("🔒 Admin dashboard is only accessible in private chat!", show_alert=True)
         return
 
     data = callback_query.data
@@ -997,6 +1019,18 @@ async def admin_callback_handler(client, callback_query):
 
 @app.on_message(filters.command("broadcast") & filters.user(ADMIN_IDS))
 async def broadcast_command(client, message):
+    if message.chat.type != ChatType.PRIVATE:
+        bot_user = app.me if app.me else await app.get_me()
+        bot_username = bot_user.username or ""
+        pm_url = f"https://t.me/{bot_username}" if bot_username else None
+        keyboard = InlineKeyboardMarkup([[InlineKeyboardButton("💬 Open in Private Chat", url=pm_url)]]) if pm_url else None
+        await message.reply_text(
+            "🔒 <b>Broadcast command is restricted to private chat only.</b>",
+            parse_mode=ParseMode.HTML,
+            reply_markup=keyboard
+        )
+        return
+
     if len(message.command) < 2 and not message.reply_to_message:
         await message.reply_text(
             "❌ <b>Usage:</b>\n"
@@ -1181,6 +1215,13 @@ async def broadcast_callback(client, callback_query):
         if user_id not in ADMIN_IDS:
             try:
                 await callback_query.answer("⛔ Admins only!", show_alert=True)
+            except Exception:
+                pass
+            return
+
+        if callback_query.message and callback_query.message.chat.type != ChatType.PRIVATE:
+            try:
+                await callback_query.answer("🔒 Broadcast can only be executed in private chat!", show_alert=True)
             except Exception:
                 pass
             return
