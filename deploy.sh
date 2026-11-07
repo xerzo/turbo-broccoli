@@ -55,7 +55,19 @@ if ! docker network inspect tg_net &>/dev/null; then
     log_success "Created network 'tg_net'"
 fi
 
-# 5. Backup persistent state (SQLite DB & session) before updating
+# 5. Prevent Docker bind-mount file-vs-directory collision on tg-feed-bot.db
+if [ -d "tg-comment/tg-feed-bot.db" ]; then
+    if [ -z "$(ls -A tg-comment/tg-feed-bot.db 2>/dev/null)" ]; then
+        log_warn "Detected 'tg-comment/tg-feed-bot.db' as an empty directory from a previous Docker mount. Replacing with file..."
+        rmdir "tg-comment/tg-feed-bot.db"
+        touch "tg-comment/tg-feed-bot.db"
+    fi
+elif [ ! -e "tg-comment/tg-feed-bot.db" ]; then
+    mkdir -p tg-comment
+    touch "tg-comment/tg-feed-bot.db"
+fi
+
+# 6. Backup persistent state (SQLite DB & session) before updating
 TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
 BACKUP_DIR="${SCRIPT_DIR}/backups/${TIMESTAMP}"
 
@@ -71,18 +83,18 @@ if [ -f "tg-comment/tg-feed-bot.db" ] || [ -d "anisearch/session" ]; then
     log_success "State backup completed."
 fi
 
-# 6. Pull latest images
+# 7. Pull latest images
 log_info "Pulling pre-built images from registry..."
 $DOCKER_COMPOSE_CMD pull
 
-# 7. Recreate containers with minimal downtime
+# 8. Recreate containers with minimal downtime
 log_info "Deploying and restarting updated containers..."
 $DOCKER_COMPOSE_CMD up -d --remove-orphans
 
-# 8. Clean up unused images
+# 9. Clean up unused images
 log_info "Pruning old and dangling container images..."
 docker image prune -f
 
-# 9. Status report
+# 10. Status report
 log_success "Deployment completed successfully! Current service status:"
 $DOCKER_COMPOSE_CMD ps

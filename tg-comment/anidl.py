@@ -226,7 +226,19 @@ class FeedBot:
 
     def __init__(self, config: Config):
         self.config = config
-        self.db = dbm.open(config.db_path, 'c')
+        db_file = config.db_path
+        if os.path.isdir(db_file):
+            logger.warning(
+                "db_path '%s' is a directory (Docker bind mount). Using '%s/feed.db' inside it.",
+                db_file, db_file
+            )
+            db_file = os.path.join(db_file, "feed.db")
+        else:
+            parent_dir = os.path.dirname(db_file)
+            if parent_dir:
+                os.makedirs(parent_dir, exist_ok=True)
+
+        self.db = dbm.open(db_file, 'c')
 
     def run(self):
         for feed in self.config.feeds:
