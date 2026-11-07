@@ -1,0 +1,19 @@
+{
+    "db_path": "tg-feed-bot.db",
+    "telegram_token": "YOUR_TELEGRAM_BOT_TOKEN",
+    "feeds": [
+        {
+            "feed_type": "rss",
+            "feed_url": "https://example.disqus.com/comments.rss",
+            "chat_id": -1001234567890,
+            "message_prefix": "New Comment on"
+        },
+        {
+            "feed_type": "api",
+            "feed_url": "https://your-site.com/api/comments",
+            "base_url": "https://your-site.com",
+            "chat_id": -1001234567890,
+            "message_prefix": "💬 New Comment on"
+        }
+    ]
+}

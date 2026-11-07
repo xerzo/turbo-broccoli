@@ -1,0 +1,15 @@
+# Merged dependencies for all 3 apps
+# tg-comment
+requests
+feedparser
+python-dateutil
+BeautifulSoup4
+
+# anisearch (wzgram fork with WarpCrypto Rust acceleration + uvloop)
+wzgram[fast]
+uvloop
+motor
+
+# mongosync (motor already includes pymongo, but explicit for clarity)
+pymongo
+

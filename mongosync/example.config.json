@@ -1,0 +1,8 @@
+{
+    "cluster_uri": "mongodb://user:pass@host:27017",
+    "source_databases": ["autoanime480p", "dual"],
+    "source_collection": "animes",
+    "target_database": "progress",
+    "target_collection": "pending",
+    "sync_interval": 10
+}

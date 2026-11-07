@@ -1,0 +1,67 @@
+services:
+  tg-comment:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: tg-comment
+    working_dir: /app/tg-comment
+    command: ["python", "anidl.py"]
+    volumes:
+      - ./tg-comment/config.json:/app/tg-comment/config.json:ro
+      - ./tg-comment/tg-feed-bot.db:/app/tg-comment/tg-feed-bot.db
+      - ./tg-comment/logs:/app/tg-comment/logs
+    restart: on-failure
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+        compress: "true"
+    networks:
+      - tg_net
+
+  anisearch:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: tgsearch
+    working_dir: /app/anisearch
+    command: ["python", "anidlsearch.py"]
+    volumes:
+      - ./anisearch/config.json:/app/anisearch/config.json:ro
+      - ./anisearch/session:/app/anisearch/session
+      - ./anisearch/logs:/app/anisearch/logs
+    restart: on-failure
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+        compress: "true"
+    networks:
+      - tg_net
+
+  mongosync:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: python-mongo-sync
+    working_dir: /app/mongosync
+    command: ["python", "app.py"]
+    volumes:
+      - ./mongosync/config.json:/app/mongosync/config.json:ro
+      - ./mongosync/logs:/app/mongosync/logs
+    restart: always
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+        compress: "true"
+    networks:
+      - tg_net
+
+networks:
+  tg_net:
+    external: true
+

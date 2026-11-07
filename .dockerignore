@@ -1,0 +1,27 @@
+# Configuration & Secrets (mounted at runtime, never baked into image)
+**/config.json
+!**/example.config.json
+
+# Python
+venv/
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Sessions & Tokens
+*.session
+*.session-journal
+anisearch/session/
+
+# Logs
+*.log
+logs/
+*/logs/
+
+# App Data & Cache
+mongosync/temp_data.json
+tg-comment/tg-feed-bot.*
+
+# Git
+.git/
+.gitignore
