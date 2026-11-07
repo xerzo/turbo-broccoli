@@ -9,7 +9,7 @@ services:
     command: ["python", "anidl.py"]
     volumes:
       - ./tg-comment/config.json:/app/tg-comment/config.json:ro
-      - ./tg-comment/tg-feed-bot.db:/app/tg-comment/tg-feed-bot.db
+      - ./tg-comment/data:/app/tg-comment/data
       - ./tg-comment/logs:/app/tg-comment/logs
     restart: on-failure
     logging:

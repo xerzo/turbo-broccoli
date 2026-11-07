@@ -55,27 +55,30 @@ if ! docker network inspect tg_net &>/dev/null; then
     log_success "Created network 'tg_net'"
 fi
 
-# 5. Prevent Docker bind-mount file-vs-directory collision on tg-feed-bot.db
+# 5. Prepare persistent data directories and migrate legacy files
+mkdir -p "tg-comment/data" "anisearch/session" "tg-comment/logs" "anisearch/logs" "mongosync/logs"
+
+# Clean up accidental empty directory mounts on tg-feed-bot.db
 if [ -d "tg-comment/tg-feed-bot.db" ]; then
-    if [ -z "$(ls -A tg-comment/tg-feed-bot.db 2>/dev/null)" ]; then
-        log_warn "Detected 'tg-comment/tg-feed-bot.db' as an empty directory from a previous Docker mount. Replacing with file..."
-        rmdir "tg-comment/tg-feed-bot.db"
-        touch "tg-comment/tg-feed-bot.db"
-    fi
-elif [ ! -e "tg-comment/tg-feed-bot.db" ]; then
-    mkdir -p tg-comment
-    touch "tg-comment/tg-feed-bot.db"
+    log_warn "Detected legacy 'tg-comment/tg-feed-bot.db' directory from previous Docker mount. Removing..."
+    rm -rf "tg-comment/tg-feed-bot.db"
+fi
+
+# Migrate legacy database file into data/ directory if present
+if [ -f "tg-comment/tg-feed-bot.db" ] && [ ! -f "tg-comment/data/tg-feed-bot.db" ]; then
+    log_info "Migrating legacy 'tg-comment/tg-feed-bot.db' to 'tg-comment/data/tg-feed-bot.db'..."
+    mv "tg-comment/tg-feed-bot.db" "tg-comment/data/tg-feed-bot.db"
 fi
 
 # 6. Backup persistent state (SQLite DB & session) before updating
 TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
 BACKUP_DIR="${SCRIPT_DIR}/backups/${TIMESTAMP}"
 
-if [ -f "tg-comment/tg-feed-bot.db" ] || [ -d "anisearch/session" ]; then
+if [ -d "tg-comment/data" ] || [ -d "anisearch/session" ]; then
     log_info "Backing up persistent database and session files to ${BACKUP_DIR}..."
     mkdir -p "${BACKUP_DIR}"
-    if [ -f "tg-comment/tg-feed-bot.db" ]; then
-        cp -p "tg-comment/tg-feed-bot.db" "${BACKUP_DIR}/"
+    if [ -d "tg-comment/data" ]; then
+        cp -rp "tg-comment/data" "${BACKUP_DIR}/"
     fi
     if [ -d "anisearch/session" ]; then
         cp -rp "anisearch/session" "${BACKUP_DIR}/"

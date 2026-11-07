@@ -97,7 +97,7 @@ class Config:
             ]
 
         return Config(
-            db_path=d.get('db_path', 'tg-feed-bot.db'),
+            db_path=d.get('db_path', 'data/tg-feed-bot.db'),
             telegram_token=d['telegram_token'],
             feeds=feeds,
             user_agent=user_agent,
@@ -227,9 +227,14 @@ class FeedBot:
     def __init__(self, config: Config):
         self.config = config
         db_file = config.db_path
+
+        # If data/ directory exists and db_file is legacy plain 'tg-feed-bot.db'
+        if db_file == "tg-feed-bot.db" and os.path.isdir("data"):
+            db_file = os.path.join("data", "tg-feed-bot.db")
+
         if os.path.isdir(db_file):
             logger.warning(
-                "db_path '%s' is a directory (Docker bind mount). Using '%s/feed.db' inside it.",
+                "db_path '%s' is a directory. Using '%s/feed.db' inside it.",
                 db_file, db_file
             )
             db_file = os.path.join(db_file, "feed.db")
@@ -238,7 +243,9 @@ class FeedBot:
             if parent_dir:
                 os.makedirs(parent_dir, exist_ok=True)
 
-        self.db = dbm.open(db_file, 'c')
+        # Use flag 'n' if the file exists but is 0-bytes to prevent 'db type could not be determined'
+        flag = 'n' if (os.path.exists(db_file) and os.path.getsize(db_file) == 0) else 'c'
+        self.db = dbm.open(db_file, flag)
 
     def run(self):
         for feed in self.config.feeds:

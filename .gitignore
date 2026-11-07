@@ -24,3 +24,4 @@ logs/
 # App Data & Cache
 mongosync/temp_data.json
 tg-comment/tg-feed-bot.*
+tg-comment/data/
