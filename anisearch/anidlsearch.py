@@ -558,7 +558,7 @@ async def text_search_handler(client, message):
 
 # ================= CALLBACK HANDLER ================= #
 
-@app.on_callback_query()
+@app.on_callback_query(filters.regex(r"^select_"))
 async def callback_handler(client, callback_query):
     data = callback_query.data
 
@@ -695,7 +695,14 @@ async def broadcast_command(client, message):
         parse_mode=ParseMode.HTML
     )
     
-    # Store broadcast data temporarily
+    # Store broadcast data temporarily (by message ID for concurrency safety)
+    if not hasattr(app, "broadcast_sessions"):
+        app.broadcast_sessions = {}
+    app.broadcast_sessions[confirm_msg.id] = {
+        "admin_id": message.from_user.id,
+        "content": content,
+        "send_method": send_method,
+    }
     app.broadcast_data = {
         "admin_id": message.from_user.id,
         "content": content,
@@ -806,32 +813,67 @@ async def execute_broadcast(client, status_message, content, send_method):
         pass
 
 
-@app.on_callback_query(filters.regex("^broadcast_"))
+@app.on_callback_query(filters.regex(r"^broadcast_"))
 async def broadcast_callback(client, callback_query):
     action = callback_query.data.split("_")[1]
+    msg_id = callback_query.message.id if callback_query.message else None
     
     if action == "cancel":
-        await callback_query.answer("Broadcast cancelled")
-        await callback_query.message.delete()
+        try:
+            await callback_query.answer("Broadcast cancelled")
+        except Exception:
+            pass
+        try:
+            await callback_query.message.delete()
+        except Exception:
+            pass
+        if hasattr(app, "broadcast_sessions") and msg_id:
+            app.broadcast_sessions.pop(msg_id, None)
         if hasattr(app, "broadcast_data"):
             delattr(app, "broadcast_data")
         return
     
     if action == "confirm":
-        if callback_query.from_user.id not in ADMIN_IDS:
-            await callback_query.answer("⛔ Admins only!", show_alert=True)
+        user_id = callback_query.from_user.id if callback_query.from_user else 0
+        if user_id not in ADMIN_IDS:
+            try:
+                await callback_query.answer("⛔ Admins only!", show_alert=True)
+            except Exception:
+                pass
             return
         
-        await callback_query.answer("🚀 Broadcasting started...")
-        status_msg = await callback_query.message.edit_text("🔄 Initializing broadcast batches...")
+        broadcast_sessions = getattr(app, "broadcast_sessions", {})
+        session = broadcast_sessions.pop(msg_id, None) if msg_id else None
+        if not session and hasattr(app, "broadcast_data"):
+            session = getattr(app, "broadcast_data", None)
+            if session and session.get("confirm_msg_id") == msg_id:
+                delattr(app, "broadcast_data")
+            elif not session or "content" not in session:
+                session = None
+
+        if not session or not session.get("content"):
+            try:
+                await callback_query.answer("⚠️ Broadcast session expired or not found.", show_alert=True)
+            except Exception:
+                pass
+            try:
+                await callback_query.message.delete()
+            except Exception:
+                pass
+            return
         
-        broadcast_data = getattr(app, "broadcast_data", {})
-        content = broadcast_data.get("content")
-        send_method = broadcast_data.get("send_method")
+        try:
+            await callback_query.answer("🚀 Broadcasting started...")
+        except Exception:
+            pass
         
-        # Clear temp data
-        if hasattr(app, "broadcast_data"):
-            delattr(app, "broadcast_data")
+        content = session.get("content")
+        send_method = session.get("send_method")
+        
+        try:
+            status_msg = await callback_query.message.edit_text("🔄 Initializing broadcast batches...")
+        except Exception:
+            status_msg = callback_query.message
         
         # Launch broadcast in background task to avoid blocking callback loop
         asyncio.create_task(
