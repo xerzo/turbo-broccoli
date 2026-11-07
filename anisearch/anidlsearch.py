@@ -9,8 +9,11 @@ from pyrogram.errors import FloodWait, UserIsBlocked, InputUserDeactivated
 import requests
 import asyncio
 import os
+import time
 from motor.motor_asyncio import AsyncIOMotorClient
 from datetime import datetime, timezone
+
+BOT_START_TIME = time.time()
 
 # High-performance event loop (uvloop)
 try:
@@ -633,18 +636,50 @@ async def help_command(client, message):
 
 # ================= STATS COMMAND (ADMIN ONLY) ================= #
 
+def format_timespan(seconds: float) -> str:
+    """Format seconds into human-readable duration like '1d 2h 30m 15s'."""
+    seconds = int(seconds)
+    days, seconds = divmod(seconds, 86400)
+    hours, seconds = divmod(seconds, 3600)
+    minutes, seconds = divmod(seconds, 60)
+    parts = []
+    if days > 0:
+        parts.append(f"{days}d")
+    if hours > 0 or days > 0:
+        parts.append(f"{hours}h")
+    if minutes > 0 or hours > 0 or days > 0:
+        parts.append(f"{minutes}m")
+    parts.append(f"{seconds}s")
+    return " ".join(parts)
+
+
+def get_system_uptime() -> str:
+    """Read machine/host uptime from /proc/uptime if available."""
+    try:
+        with open("/proc/uptime", "r") as f:
+            uptime_seconds = float(f.readline().split()[0])
+            return format_timespan(uptime_seconds)
+    except Exception:
+        return "N/A"
+
+
 @app.on_message(filters.command("stats") & filters.user(ADMIN_IDS))
 async def stats_command(client, message):
     total_users = await get_user_count()
-    
-    # Basic stats
+    bot_uptime = format_timespan(time.time() - BOT_START_TIME)
+    system_uptime = get_system_uptime()
+    bot_user = app.me if app.me else await app.get_me()
+
+    channel_info = FORCE_SUB_CHANNEL if ENABLE_FORCE_SUB and FORCE_SUB_CHANNEL else "Disabled"
+
     text = (
-        "<b>📊 Bot Statistics</b>\n\n"
-        f"👥 Total Users: <code>{total_users}</code>\n"
-        f"🤖 Bot Name: <code>{(await app.get_me()).first_name}</code>\n"
-        f"📅 Uptime: <code>Running</code>\n\n"
-        f"🔗 Channel: {FORCE_SUB_CHANNEL}\n"
-        f"👑 Admins: <code>{len(ADMIN_IDS)}</code>"
+        "<b>📊 Bot & System Statistics</b>\n\n"
+        f"🤖 <b>Bot Name:</b> <code>{escape(bot_user.first_name)}</code>\n"
+        f"⏱ <b>Bot Uptime:</b> <code>{bot_uptime}</code>\n"
+        f"🖥 <b>Host Uptime:</b> <code>{system_uptime}</code>\n"
+        f"👥 <b>Total Users:</b> <code>{total_users}</code>\n"
+        f"👑 <b>Admins:</b> <code>{len(ADMIN_IDS)}</code>\n"
+        f"📢 <b>Force Sub:</b> <code>{channel_info}</code>"
     )
     
     await message.reply_text(text, parse_mode=ParseMode.HTML)

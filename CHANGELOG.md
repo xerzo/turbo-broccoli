@@ -24,6 +24,7 @@ Refactored all three services (`tg-comment`, `anisearch`, `mongosync`) to decoup
 - **Batched & Flood-Safe Broadcast in `anisearch`** — Replaced instant broadcast loop with batched execution (25 users/batch), automatic `FloodWait` sleep-and-retry, inactive/blocked user pruning, live progress updates, and async task execution.
 - **Configurable Branding & Start Buttons in `anisearch`** — Allows customizing bot title, website link, updates channel, community chat, or custom button layouts in `config.json` without editing Python code.
 - **Group Mention & Reply Search in `anisearch`** — Enables searching in Telegram groups by mentioning the bot (`@bot keyword`) or replying to bot messages, alongside dedicated forum topic threads and optional global group text search.
+- **Bot & Host Uptime Metrics in `/stats`** — Enhanced `/stats` in `anisearch/anidlsearch.py` with human-readable bot uptime (elapsed time since process boot formatted as `Xd Xh Xm Xs`) and host machine uptime (parsed from `/proc/uptime`).
 
 ### Changed
 - **Redesigned `/start` and `/help` Messages** — Upgraded layout with clean typography, emoji badges, command guides, and dynamic community buttons.
