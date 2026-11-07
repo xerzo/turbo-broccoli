@@ -31,6 +31,7 @@ Refactored all three services (`tg-comment`, `anisearch`, `mongosync`) to decoup
 - **Interactive Admin Dashboard & Live Controls** — Upgraded `/stats` and added `/admin` with `🔄 Refresh Stats` button and `⚙️ Live Settings` control panel to toggle `Force Sub` and `Group Text Search` in-memory on the fly.
 
 ### Changed
+- **Streamlined `/start` Welcome Message** — Removed inline search mention from the initial welcome text in `anisearch/anidlsearch.py` to keep the `/start` greeting clean and focused on direct searching.
 - **Redesigned `/start` and `/help` Messages** — Upgraded layout with clean typography, emoji badges, command guides, and dynamic community buttons.
 - **`docker-compose.yml` Volume Mounts**:
   - Removed full directory bind mounts (`./tg-comment:/app/tg-comment`, `./anisearch:/app/anisearch`, `./mongosync:/app/mongosync`) since application code is already baked into the image.

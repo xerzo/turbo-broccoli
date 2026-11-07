@@ -413,17 +413,13 @@ async def start_command(client, message):
             "• <code>/admin</code> or <code>/stats</code> — Interactive dashboard\n"
             "• <code>/broadcast</code> — Broadcast announcement"
         )
-    
-    bot_user = app.me if app.me else await app.get_me()
-    bot_username = bot_user.username or ""
-    inline_hint = f"\n• Inline in any chat: <code>@{bot_username} Naruto</code>" if bot_username else ""
 
     text = (
         f"👋 <b>Hello {first_name}!</b>\n\n"
         f"Welcome to <b>{escape(BOT_NAME)}</b> 🎬\n\n"
         "🔍 <b>How to search anime:</b>\n"
         "• Send anime title directly in chat (e.g. <code>Naruto</code>)\n"
-        f"• Or use command: <code>/anime One Piece</code>{inline_hint}\n\n"
+        "• Or use command: <code>/anime One Piece</code>\n\n"
         "⚡ <b>Commands:</b>\n"
         "• <code>/anime &lt;name&gt;</code> — Search anime database\n"
         "• <code>/random</code> — Surprise me with a random anime\n"
