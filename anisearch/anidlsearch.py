@@ -7,7 +7,8 @@ from pyrogram.types import (
     InlineKeyboardButton,
     InlineKeyboardMarkup,
     InlineQueryResultArticle,
-    InputTextMessageContent
+    InputTextMessageContent,
+    LinkPreviewOptions
 )
 from pyrogram.enums import ParseMode, ChatMemberStatus, ChatType
 from pyrogram.errors import FloodWait, UserIsBlocked, InputUserDeactivated
@@ -382,7 +383,7 @@ async def send_anime_result(message, anime, is_random=False):
         text=info_text,
         parse_mode=ParseMode.HTML,
         reply_markup=reply_markup,
-        disable_web_page_preview=False
+        link_preview_options=LinkPreviewOptions(is_disabled=False)
     )
 
 
@@ -777,7 +778,7 @@ async def inline_query_handler(client, inline_query):
                 input_message_content=InputTextMessageContent(
                     message_text=info_text,
                     parse_mode=ParseMode.HTML,
-                    disable_web_page_preview=False
+                    link_preview_options=LinkPreviewOptions(is_disabled=False)
                 ),
                 reply_markup=reply_markup
             )

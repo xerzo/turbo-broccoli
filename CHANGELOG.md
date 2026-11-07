@@ -49,6 +49,7 @@ Refactored all three services (`tg-comment`, `anisearch`, `mongosync`) to decoup
 - **Restricted Admin Commands Visibility** — `/stats` and `/broadcast` are now only displayed to authorized IDs in `ADMIN_IDS` in `/start` and `/help`, keeping the interface clean for regular users.
 - **Exclude Admins from Broadcast Dispatches** — Updated `get_all_user_ids()` and `broadcast_command` in `anisearch/anidlsearch.py` to filter out `ADMIN_IDS` (using MongoDB `$nin` and type-safe Python set exclusion), preventing bot administrators from receiving redundant broadcast messages and ensuring confirmation prompts reflect the exact non-admin recipient count.
 - **Callback Query Collision on Broadcast Buttons** — Bound anime selection handler to `filters.regex(r"^select_")` instead of an unfocused global callback handler that was intercepting `broadcast_confirm` / `broadcast_cancel` callbacks and leaving the inline button in an endless loading state.
+- **Deprecated `disable_web_page_preview` Warning** — Replaced deprecated `disable_web_page_preview=False` with modern `link_preview_options=LinkPreviewOptions(is_disabled=False)` in `send_anime_result` and `inline_query_handler` in `anisearch/anidlsearch.py`.
 
 ### Removed
 - **Untracked Sensitive Configs** — Removed live `tg-comment/config.json` from git tracking and ignored all `**/config.json` in `.gitignore`.
