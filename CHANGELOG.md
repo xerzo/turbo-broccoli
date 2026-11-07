@@ -25,6 +25,10 @@ Refactored all three services (`tg-comment`, `anisearch`, `mongosync`) to decoup
 - **Configurable Branding & Start Buttons in `anisearch`** — Allows customizing bot title, website link, updates channel, community chat, or custom button layouts in `config.json` without editing Python code.
 - **Group Mention & Reply Search in `anisearch`** — Enables searching in Telegram groups by mentioning the bot (`@bot keyword`) or replying to bot messages, alongside dedicated forum topic threads and optional global group text search.
 - **Bot & Host Uptime Metrics in `/stats`** — Enhanced `/stats` in `anisearch/anidlsearch.py` with human-readable bot uptime (elapsed time since process boot formatted as `Xd Xh Xm Xs`) and host machine uptime (parsed from `/proc/uptime`).
+- **Telegram Inline Mode Search** — Added `@app.on_inline_query()` allowing users to type `@bot_username <title>` in any Telegram chat to instantly preview interactive anime cards with posters, synopsis, and direct post links.
+- **Search Result Pagination** — Implemented 5-item page navigation (`◀️ Prev`, `1/N`, `Next ▶️`, `❌ Close`) with in-place message updates for multi-result anime queries.
+- **Surprise Me / Random Anime** — Added `/random` command and `🎲 Roll Another Anime` callback button with rotating seed pools to instantly roll random anime recommendations.
+- **Interactive Admin Dashboard & Live Controls** — Upgraded `/stats` and added `/admin` with `🔄 Refresh Stats` button and `⚙️ Live Settings` control panel to toggle `Force Sub` and `Group Text Search` in-memory on the fly.
 
 ### Changed
 - **Redesigned `/start` and `/help` Messages** — Upgraded layout with clean typography, emoji badges, command guides, and dynamic community buttons.

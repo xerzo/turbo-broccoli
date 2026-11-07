@@ -3,13 +3,19 @@ from logging.handlers import RotatingFileHandler
 import json
 from html import escape
 from pyrogram import Client, filters
-from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup
+from pyrogram.types import (
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+    InlineQueryResultArticle,
+    InputTextMessageContent
+)
 from pyrogram.enums import ParseMode, ChatMemberStatus, ChatType
 from pyrogram.errors import FloodWait, UserIsBlocked, InputUserDeactivated
 import requests
 import asyncio
 import os
 import time
+import random
 from motor.motor_asyncio import AsyncIOMotorClient
 from datetime import datetime, timezone
 
@@ -341,7 +347,7 @@ def format_anime_info(anime):
 
 # ================= SEND RESULT ================= #
 
-async def send_anime_result(message, anime):
+async def send_anime_result(message, anime, is_random=False):
     image_url = get_image_url(anime)
     info_text = format_anime_info(anime)
     
@@ -349,13 +355,17 @@ async def send_anime_result(message, anime):
     post_url = get_post_url(anime)
     if post_url:
         keyboard.append([InlineKeyboardButton("🔗 View Full Post", url=post_url)])
+    if is_random:
+        keyboard.append([InlineKeyboardButton("🎲 Roll Another Anime", callback_data="random_anime")])
     
     reply_markup = InlineKeyboardMarkup(keyboard) if keyboard else None
+    chat_id = message.chat.id
     
     if image_url:
         try:
             logger.info(f"Sending image: {image_url}")
-            await message.reply_photo(
+            await app.send_photo(
+                chat_id=chat_id,
                 photo=image_url,
                 caption=info_text,
                 parse_mode=ParseMode.HTML,
@@ -367,8 +377,9 @@ async def send_anime_result(message, anime):
             # Fallback: send as text with image URL
             info_text += f"\n\n🖼️ <a href='{image_url}'>View Image</a>"
     
-    await message.reply_text(
-        info_text,
+    await app.send_message(
+        chat_id=chat_id,
+        text=info_text,
         parse_mode=ParseMode.HTML,
         reply_markup=reply_markup,
         disable_web_page_preview=False
@@ -398,43 +409,78 @@ async def start_command(client, message):
     if user_id in ADMIN_IDS:
         admin_commands = (
             "\n\n👑 <b>Admin Commands:</b>\n"
-            "• <code>/stats</code> — Bot statistics\n"
+            "• <code>/admin</code> or <code>/stats</code> — Interactive dashboard\n"
             "• <code>/broadcast</code> — Broadcast announcement"
         )
     
+    bot_user = app.me if app.me else await app.get_me()
+    bot_username = bot_user.username or ""
+    inline_hint = f"\n• Inline in any chat: <code>@{bot_username} Naruto</code>" if bot_username else ""
+
     text = (
         f"👋 <b>Hello {first_name}!</b>\n\n"
         f"Welcome to <b>{escape(BOT_NAME)}</b> 🎬\n\n"
         "🔍 <b>How to search anime:</b>\n"
         "• Send anime title directly in chat (e.g. <code>Naruto</code>)\n"
-        "• Or use command: <code>/anime One Piece</code>\n\n"
+        f"• Or use command: <code>/anime One Piece</code>{inline_hint}\n\n"
         "⚡ <b>Commands:</b>\n"
         "• <code>/anime &lt;name&gt;</code> — Search anime database\n"
+        "• <code>/random</code> — Surprise me with a random anime\n"
         f"• <code>/help</code> — Guide & features{admin_commands}"
     )
     
     await message.reply_text(text, parse_mode=ParseMode.HTML, reply_markup=get_start_keyboard())
 
 
+# ================= SEARCH PAGINATION HELPERS ================= #
+
+PAGE_SIZE = 5
+
+def build_search_keyboard(results, page, query):
+    total = len(results)
+    total_pages = max(1, (total + PAGE_SIZE - 1) // PAGE_SIZE)
+    page = max(0, min(page, total_pages - 1))
+    
+    start_idx = page * PAGE_SIZE
+    end_idx = min(start_idx + PAGE_SIZE, total)
+    
+    keyboard = []
+    for i in range(start_idx, end_idx):
+        anime = results[i]
+        title = anime.get("title", "Unknown")
+        anime_type = anime.get("type", "")
+        label = f"[{anime_type}] {title}" if anime_type else title
+        if len(label) > 40:
+            label = label[:37] + "..."
+        keyboard.append([InlineKeyboardButton(label, callback_data=f"select_{i}")])
+    
+    # Navigation row if more than 1 page
+    if total_pages > 1:
+        nav_row = []
+        if page > 0:
+            nav_row.append(InlineKeyboardButton("◀️ Prev", callback_data=f"page_{page - 1}"))
+        else:
+            nav_row.append(InlineKeyboardButton("⏹", callback_data="noop"))
+            
+        nav_row.append(InlineKeyboardButton(f"{page + 1}/{total_pages}", callback_data="noop"))
+        
+        if page < total_pages - 1:
+            nav_row.append(InlineKeyboardButton("Next ▶️", callback_data=f"page_{page + 1}"))
+        else:
+            nav_row.append(InlineKeyboardButton("⏹", callback_data="noop"))
+        keyboard.append(nav_row)
+        
+    keyboard.append([InlineKeyboardButton("❌ Close", callback_data="close_search")])
+    return InlineKeyboardMarkup(keyboard)
+
+
 # ================= SEARCH HANDLERS (with force sub) ================= #
 
 async def handle_search(message, query):
-    # Force subscribe check
-   # if not await check_force_sub(app, message):
-    #    return
-    
-    # Save user activity
-    '''
-    await save_user(
-        message.from_user.id,
-        username=message.from_user.username,
-        first_name=message.from_user.first_name
-    )
-    '''
     result = await asyncio.to_thread(search_anime, query)
     
     if not result or "results" not in result or not result["results"]:
-        await message.reply_text(f"❌ No results found for '{query}'.")
+        await message.reply_text(f"❌ No results found for '<code>{escape(query)}</code>'.", parse_mode=ParseMode.HTML)
         return
     
     results = result["results"]
@@ -449,27 +495,22 @@ async def handle_search(message, query):
         await send_anime_result(message, results[0])
         return
     
-    text = f"🔍 Found {len(results)} results for '{query}':\n\nSelect one:"
-    keyboard = []
-    
-    for i, anime in enumerate(results[:10]):
-        title = anime.get("title", "Unknown")
-        anime_type = anime.get("type", "")
-        label = f"[{anime_type}] {title}"
-    
-        if len(label) > 40:
-            label = label[:37] + "..."
-    
-        keyboard.append(
-            [InlineKeyboardButton(label, callback_data=f"select_{i}")]
-        )
+    total = len(results)
+    total_pages = max(1, (total + PAGE_SIZE - 1) // PAGE_SIZE)
+    page_text = f" (Page 1/{total_pages})" if total_pages > 1 else ""
+    text = f"🔍 Found <b>{total}</b> results for '<code>{escape(query)}</code>'{page_text}:\n\nSelect an anime below:"
     
     selection_msg = await message.reply_text(
         text,
-        reply_markup=InlineKeyboardMarkup(keyboard)
+        reply_markup=build_search_keyboard(results, 0, query),
+        parse_mode=ParseMode.HTML
     )
     
-    app.search_results[selection_msg.id] = results
+    app.search_results[selection_msg.id] = {
+        "query": query,
+        "results": results,
+        "page": 0
+    }
     
     app.selection_messages[selection_msg.id] = {
         "chat_id": selection_msg.chat.id
@@ -502,7 +543,7 @@ for cmd in ["anime", "anidl", "search"]:
     filters.text
     & ~filters.command([
         "start", "help", "anime", "anidl",
-        "search", "stats", "broadcast"
+        "search", "stats", "admin", "broadcast", "random"
     ])
 )
 async def text_search_handler(client, message):
@@ -564,46 +605,191 @@ async def text_search_handler(client, message):
 @app.on_callback_query(filters.regex(r"^select_"))
 async def callback_handler(client, callback_query):
     data = callback_query.data
+    index = int(data.split("_")[1])
 
-    if data.startswith("select_"):
-        index = int(data.split("_")[1])
-    
-        results = app.search_results.get(
-            callback_query.message.id,
-            []
+    search_data = app.search_results.get(callback_query.message.id)
+    if isinstance(search_data, dict):
+        results = search_data.get("results", [])
+    elif isinstance(search_data, list):
+        results = search_data
+    else:
+        results = []
+
+    if 0 <= index < len(results):
+        await callback_query.answer("Loading...")
+
+        try:
+            await callback_query.message.delete()
+        except Exception:
+            pass
+
+        app.search_results.pop(callback_query.message.id, None)
+        app.selection_messages.pop(callback_query.message.id, None)
+
+        await send_anime_result(callback_query.message, results[index])
+    else:
+        await callback_query.answer("This menu has expired.", show_alert=True)
+
+
+# ================= SEARCH PAGINATION CALLBACKS ================= #
+
+@app.on_callback_query(filters.regex(r"^page_"))
+async def page_callback_handler(client, callback_query):
+    new_page = int(callback_query.data.split("_")[1])
+    search_data = app.search_results.get(callback_query.message.id)
+    if not search_data:
+        await callback_query.answer("⚠️ This search menu has expired.", show_alert=True)
+        return
+
+    results = search_data.get("results", []) if isinstance(search_data, dict) else search_data
+    query = search_data.get("query", "") if isinstance(search_data, dict) else ""
+    total = len(results)
+    total_pages = max(1, (total + PAGE_SIZE - 1) // PAGE_SIZE)
+    if isinstance(search_data, dict):
+        search_data["page"] = new_page
+
+    markup = build_search_keyboard(results, new_page, query)
+    text = (
+        f"🔍 Found <b>{total}</b> results for '<code>{escape(query)}</code>' "
+        f"(Page {new_page + 1}/{total_pages}):\n\nSelect an anime below:"
+    )
+
+    try:
+        await callback_query.message.edit_text(text, reply_markup=markup, parse_mode=ParseMode.HTML)
+    except Exception:
+        pass
+    await callback_query.answer()
+
+
+@app.on_callback_query(filters.regex(r"^close_search$"))
+async def close_search_handler(client, callback_query):
+    app.search_results.pop(callback_query.message.id, None)
+    app.selection_messages.pop(callback_query.message.id, None)
+    try:
+        await callback_query.message.delete()
+    except Exception:
+        pass
+    await callback_query.answer("Closed")
+
+
+@app.on_callback_query(filters.regex(r"^noop$"))
+async def noop_handler(client, callback_query):
+    await callback_query.answer()
+
+
+# ================= SURPRISE ME / RANDOM ANIME ================= #
+
+RANDOM_SEEDS = [
+    "Naruto", "One Piece", "Bleach", "Attack on Titan", "Jujutsu Kaisen",
+    "Demon Slayer", "Fullmetal Alchemist", "Death Note", "Hunter x Hunter",
+    "Steins;Gate", "Frieren", "Spy x Family", "Chainsaw Man", "Vinland Saga",
+    "Solo Leveling", "Bocchi the Rock", "Mob Psycho 100", "Haikyuu",
+    "Sword Art Online", "Black Clover", "Overlord", "Re:Zero", "Konosuba",
+    "Dr. Stone", "Tokyo Ghoul", "Cowboy Bebop", "Gintama", "Fate",
+    "Oshi no Ko", "Mushoku Tensei", "Cyberpunk", "Classroom of the Elite"
+]
+
+async def fetch_random_anime():
+    """Fetch a random anime recommendation from the API."""
+    seeds = random.sample(RANDOM_SEEDS, min(4, len(RANDOM_SEEDS)))
+    for seed in seeds:
+        data = await asyncio.to_thread(search_anime, seed)
+        if data and data.get("results"):
+            return random.choice(data["results"])
+    return None
+
+
+@app.on_message(filters.command("random"))
+async def random_anime_command(client, message):
+    if not await check_force_sub(client, message):
+        return
+    status = await message.reply_text("🎲 <i>Rolling a random anime recommendation...</i>", parse_mode=ParseMode.HTML)
+    anime = await fetch_random_anime()
+    if not anime:
+        await status.edit_text("❌ Could not fetch a random anime. Please try again.")
+        return
+    try:
+        await status.delete()
+    except Exception:
+        pass
+    await send_anime_result(message, anime, is_random=True)
+
+
+@app.on_callback_query(filters.regex(r"^random_anime$"))
+async def random_anime_callback(client, callback_query):
+    await callback_query.answer("🎲 Finding another anime...")
+    anime = await fetch_random_anime()
+    if not anime:
+        await callback_query.answer("❌ Could not fetch another anime. Please try again.", show_alert=True)
+        return
+    try:
+        await callback_query.message.delete()
+    except Exception:
+        pass
+    await send_anime_result(callback_query.message, anime, is_random=True)
+
+
+# ================= TELEGRAM INLINE MODE ================= #
+
+@app.on_inline_query()
+async def inline_query_handler(client, inline_query):
+    query = inline_query.query.strip()
+    if not query:
+        await inline_query.answer(
+            results=[],
+            switch_pm_text="🔍 Type an anime title to search...",
+            switch_pm_parameter="help",
+            cache_time=5
         )
-    
-        if 0 <= index < len(results):
-    
-            await callback_query.answer("Loading...")
-    
-            try:
-                await callback_query.message.delete()
-            except Exception:
-                pass
-    
-            app.search_results.pop(
-                callback_query.message.id,
-                None
+        return
+
+    result = await asyncio.to_thread(search_anime, query)
+    if not result or not result.get("results"):
+        await inline_query.answer(
+            results=[],
+            switch_pm_text=f"❌ No anime found for '{query}'",
+            switch_pm_parameter="search",
+            cache_time=5
+        )
+        return
+
+    articles = []
+    for i, anime in enumerate(result["results"][:15]):
+        title = anime.get("title", "Unknown Title")
+        anime_type = anime.get("type", "Anime")
+        synopsis = anime.get("synopsis", "No synopsis available.") or "No synopsis available."
+        image_url = get_image_url(anime)
+        post_url = get_post_url(anime)
+        info_text = format_anime_info(anime)
+
+        keyboard = []
+        if post_url:
+            keyboard.append([InlineKeyboardButton("🔗 View Full Post", url=post_url)])
+        reply_markup = InlineKeyboardMarkup(keyboard) if keyboard else None
+
+        desc = (synopsis[:110] + "...") if len(synopsis) > 110 else synopsis
+        articles.append(
+            InlineQueryResultArticle(
+                id=str(i),
+                title=f"[{anime_type}] {title}" if anime_type else title,
+                description=desc,
+                thumb_url=image_url if image_url else None,
+                input_message_content=InputTextMessageContent(
+                    message_text=info_text,
+                    parse_mode=ParseMode.HTML,
+                    disable_web_page_preview=False
+                ),
+                reply_markup=reply_markup
             )
-    
-            app.selection_messages.pop(
-                callback_query.message.id,
-                None
-            )
-    
-            await send_anime_result(
-                callback_query.message,
-                results[index]
-            )
-    
-        else:
-            await callback_query.answer(
-                "This menu expired.",
-                show_alert=True
-            )
+        )
+
+    await inline_query.answer(
+        results=articles,
+        cache_time=60
+    )
 
 
+# ================= HELP COMMAND ================= #
 
 @app.on_message(filters.command("help"))
 async def help_command(client, message):
@@ -617,16 +803,24 @@ async def help_command(client, message):
     if message.from_user and message.from_user.id in ADMIN_IDS:
         admin_section = (
             "\n\n👑 <b>Admin Tools:</b>\n"
-            "• <code>/stats</code> — Bot statistics\n"
+            "• <code>/admin</code> or <code>/stats</code> — Interactive dashboard\n"
             "• <code>/broadcast</code> — Broadcast announcement"
         )
     
+    bot_user = app.me if app.me else await app.get_me()
+    bot_username = bot_user.username or ""
+    inline_guide = f"\n• <b>Inline Search:</b> Type <code>@{bot_username} Naruto</code> in any chat" if bot_username else ""
+
     text = (
         f"<b>🤖 How to use {escape(BOT_NAME)}:</b>\n\n"
         "• Type any anime title directly in private chat\n"
-        "• Or use command: <code>/anime &lt;title&gt;</code> in groups\n\n"
+        "• Or use command: <code>/anime &lt;title&gt;</code> in groups\n"
+        "• Surprise recommendation: <code>/random</code>"
+        f"{inline_guide}\n\n"
         "✨ <b>Features:</b>\n"
         "🖼 Poster + English & Japanese titles + Synopsis\n"
+        "📑 Interactive page-by-page search results\n"
+        "🎲 Surprise me random anime button\n"
         "🔗 Direct post links & download sources\n"
         "⚡ Fast interactive selection menu"
         f"{join_info}{admin_section}"
@@ -634,7 +828,7 @@ async def help_command(client, message):
     await message.reply_text(text, parse_mode=ParseMode.HTML, reply_markup=get_start_keyboard())
 
 
-# ================= STATS COMMAND (ADMIN ONLY) ================= #
+# ================= STATS & ADMIN DASHBOARD ================= #
 
 def format_timespan(seconds: float) -> str:
     """Format seconds into human-readable duration like '1d 2h 30m 15s'."""
@@ -663,8 +857,32 @@ def get_system_uptime() -> str:
         return "N/A"
 
 
-@app.on_message(filters.command("stats") & filters.user(ADMIN_IDS))
-async def stats_command(client, message):
+def build_stats_keyboard():
+    return InlineKeyboardMarkup([
+        [
+            InlineKeyboardButton("🔄 Refresh Stats", callback_data="admin_refresh_stats"),
+            InlineKeyboardButton("⚙️ Live Settings", callback_data="admin_settings")
+        ]
+    ])
+
+
+def build_settings_keyboard():
+    fs_status = "✅ ON" if ENABLE_FORCE_SUB else "❌ OFF"
+    gt_status = "✅ ON" if ENABLE_TEXT_SEARCH_IN_GROUPS else "❌ OFF"
+    return InlineKeyboardMarkup([
+        [
+            InlineKeyboardButton(f"Force Sub: {fs_status}", callback_data="admin_toggle_forcesub")
+        ],
+        [
+            InlineKeyboardButton(f"Group Text Search: {gt_status}", callback_data="admin_toggle_groupsearch")
+        ],
+        [
+            InlineKeyboardButton("🔙 Back to Stats", callback_data="admin_refresh_stats")
+        ]
+    ])
+
+
+async def build_stats_text():
     total_users = await get_user_count()
     bot_uptime = format_timespan(time.time() - BOT_START_TIME)
     system_uptime = get_system_uptime()
@@ -672,17 +890,98 @@ async def stats_command(client, message):
 
     channel_info = FORCE_SUB_CHANNEL if ENABLE_FORCE_SUB and FORCE_SUB_CHANNEL else "Disabled"
 
-    text = (
+    return (
         "<b>📊 Bot & System Statistics</b>\n\n"
         f"🤖 <b>Bot Name:</b> <code>{escape(bot_user.first_name)}</code>\n"
         f"⏱ <b>Bot Uptime:</b> <code>{bot_uptime}</code>\n"
         f"🖥 <b>Host Uptime:</b> <code>{system_uptime}</code>\n"
         f"👥 <b>Total Users:</b> <code>{total_users}</code>\n"
         f"👑 <b>Admins:</b> <code>{len(ADMIN_IDS)}</code>\n"
-        f"📢 <b>Force Sub:</b> <code>{channel_info}</code>"
+        f"📢 <b>Force Sub:</b> <code>{channel_info}</code>\n"
+        f"💬 <b>Group Search:</b> <code>{'Enabled' if ENABLE_TEXT_SEARCH_IN_GROUPS else 'Mention Only'}</code>"
     )
-    
-    await message.reply_text(text, parse_mode=ParseMode.HTML)
+
+
+@app.on_message(filters.command(["stats", "admin"]) & filters.user(ADMIN_IDS))
+async def stats_command(client, message):
+    text = await build_stats_text()
+    await message.reply_text(text, parse_mode=ParseMode.HTML, reply_markup=build_stats_keyboard())
+
+
+@app.on_callback_query(filters.regex(r"^admin_"))
+async def admin_callback_handler(client, callback_query):
+    user_id = callback_query.from_user.id if callback_query.from_user else 0
+    if user_id not in ADMIN_IDS:
+        await callback_query.answer("⛔ Admins only!", show_alert=True)
+        return
+
+    data = callback_query.data
+    global ENABLE_FORCE_SUB, ENABLE_TEXT_SEARCH_IN_GROUPS
+
+    if data == "admin_refresh_stats":
+        text = await build_stats_text()
+        try:
+            await callback_query.message.edit_text(
+                text,
+                parse_mode=ParseMode.HTML,
+                reply_markup=build_stats_keyboard()
+            )
+        except Exception:
+            pass
+        await callback_query.answer("✅ Stats refreshed!")
+
+    elif data == "admin_settings":
+        settings_text = (
+            "<b>⚙️ Live Bot Controls</b>\n\n"
+            "Toggle runtime settings on the fly without restarting the bot:\n\n"
+            f"• <b>Force Sub:</b> {'Enabled' if ENABLE_FORCE_SUB else 'Disabled'}\n"
+            f"• <b>Group Plain Text Search:</b> {'Enabled' if ENABLE_TEXT_SEARCH_IN_GROUPS else 'Disabled (Mention/Reply only)'}"
+        )
+        try:
+            await callback_query.message.edit_text(
+                settings_text,
+                parse_mode=ParseMode.HTML,
+                reply_markup=build_settings_keyboard()
+            )
+        except Exception:
+            pass
+        await callback_query.answer()
+
+    elif data == "admin_toggle_forcesub":
+        ENABLE_FORCE_SUB = not ENABLE_FORCE_SUB
+        await callback_query.answer(f"Force Sub set to {'ON' if ENABLE_FORCE_SUB else 'OFF'}")
+        settings_text = (
+            "<b>⚙️ Live Bot Controls</b>\n\n"
+            "Toggle runtime settings on the fly without restarting the bot:\n\n"
+            f"• <b>Force Sub:</b> {'Enabled' if ENABLE_FORCE_SUB else 'Disabled'}\n"
+            f"• <b>Group Plain Text Search:</b> {'Enabled' if ENABLE_TEXT_SEARCH_IN_GROUPS else 'Disabled (Mention/Reply only)'}"
+        )
+        try:
+            await callback_query.message.edit_text(
+                settings_text,
+                parse_mode=ParseMode.HTML,
+                reply_markup=build_settings_keyboard()
+            )
+        except Exception:
+            pass
+
+    elif data == "admin_toggle_groupsearch":
+        ENABLE_TEXT_SEARCH_IN_GROUPS = not ENABLE_TEXT_SEARCH_IN_GROUPS
+        await callback_query.answer(f"Group Text Search set to {'ON' if ENABLE_TEXT_SEARCH_IN_GROUPS else 'OFF'}")
+        settings_text = (
+            "<b>⚙️ Live Bot Controls</b>\n\n"
+            "Toggle runtime settings on the fly without restarting the bot:\n\n"
+            f"• <b>Force Sub:</b> {'Enabled' if ENABLE_FORCE_SUB else 'Disabled'}\n"
+            f"• <b>Group Plain Text Search:</b> {'Enabled' if ENABLE_TEXT_SEARCH_IN_GROUPS else 'Disabled (Mention/Reply only)'}"
+        )
+        try:
+            await callback_query.message.edit_text(
+                settings_text,
+                parse_mode=ParseMode.HTML,
+                reply_markup=build_settings_keyboard()
+            )
+        except Exception:
+            pass
 
 
 # ================= BROADCAST COMMAND (ADMIN ONLY) ================= #
