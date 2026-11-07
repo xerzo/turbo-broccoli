@@ -1,6 +1,9 @@
 # Configuration & Secrets (use example.config.json as template)
 **/config.json
 !**/example.config.json
+.env
+!.env.example
+backups/
 
 # Python
 venv/

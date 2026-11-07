@@ -30,8 +30,12 @@ Refactored all three services (`tg-comment`, `anisearch`, `mongosync`) to decoup
 - **Surprise Me / Random Anime** — Added `/random` command and `🎲 Roll Another Anime` callback button with rotating seed pools to instantly roll random anime recommendations.
 - **Interactive Admin Dashboard & Live Controls** — Upgraded `/stats` and added `/admin` with `🔄 Refresh Stats` button and `⚙️ Live Settings` control panel to toggle `Force Sub` and `Group Text Search` in-memory on the fly.
 - **Configurable User-Agent for HTTP Requests** — Added realistic browser User-Agent headers (defaulting to modern Chrome desktop) across `anisearch/anidlsearch.py` and `tg-comment/anidl.py` (both `feedparser` and `requests`), preventing 403 Forbidden errors or Cloudflare blocks on external APIs and feeds.
+- **GitHub Actions CI/CD Image Publishing Workflow** — Added `.github/workflows/docker-build-push.yml` to automatically build, tag, and publish unified multi-service images to GitHub Container Registry (GHCR) with Buildx caching on push to `main` and release tags.
+- **Production Deployment Script (`deploy.sh`)** — Added automated update script that checks prerequisites, auto-provisions `tg_net` network, backs up state/database files, pulls updated images from GHCR, restarts services with zero downtime, and prunes unused images.
+- **Environment Configuration Template (`.env.example`)** — Added `.env.example` defining `IMAGE_TAG` pointing to GHCR container images.
 
 ### Changed
+- **Dynamic Image Tagging in `docker-compose.yml`** — Configured services to reference `image: ${IMAGE_TAG:-dockerize:latest}` with fallback to local `build:`, enabling instant image pulling in production while preserving local build capability.
 - **Streamlined `/start` Welcome Message** — Removed inline search mention from the initial welcome text in `anisearch/anidlsearch.py` to keep the `/start` greeting clean and focused on direct searching.
 - **Redesigned `/start` and `/help` Messages** — Upgraded layout with clean typography, emoji badges, command guides, and dynamic community buttons.
 - **`docker-compose.yml` Volume Mounts**:

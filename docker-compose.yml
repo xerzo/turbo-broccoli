@@ -1,5 +1,6 @@
 services:
   tg-comment:
+    image: ${IMAGE_TAG:-dockerize:latest}
     build:
       context: .
       dockerfile: Dockerfile
@@ -21,6 +22,7 @@ services:
       - tg_net
 
   anisearch:
+    image: ${IMAGE_TAG:-dockerize:latest}
     build:
       context: .
       dockerfile: Dockerfile
@@ -42,6 +44,7 @@ services:
       - tg_net
 
   mongosync:
+    image: ${IMAGE_TAG:-dockerize:latest}
     build:
       context: .
       dockerfile: Dockerfile
