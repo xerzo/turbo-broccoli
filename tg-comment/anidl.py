@@ -36,6 +36,11 @@ logger.addHandler(fh)
 logger.addHandler(ch)
 
 DEFAULT_MESSAGE_PREFIX = "New post:"
+DEFAULT_USER_AGENT = (
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+    "AppleWebKit/537.36 (KHTML, like Gecko) "
+    "Chrome/131.0.0.0 Safari/537.36"
+)
 # Delay between each Telegram message to avoid rate limits
 MESSAGE_DELAY = 3
 # Max retries on rate limit before giving up for this cycle
@@ -60,11 +65,14 @@ class Config:
     db_path: str
     telegram_token: str
     feeds: List[FeedConfig] = field(default_factory=list)
+    user_agent: str = DEFAULT_USER_AGENT
 
     @staticmethod
     def from_file(filename):
         with open(filename) as f:
             d = json.load(f)
+
+        user_agent = d.get("user_agent", os.getenv("USER_AGENT", DEFAULT_USER_AGENT))
 
         # Legacy single-feed format (always RSS)
         if 'feed_url' in d:
@@ -92,6 +100,7 @@ class Config:
             db_path=d.get('db_path', 'tg-feed-bot.db'),
             telegram_token=d['telegram_token'],
             feeds=feeds,
+            user_agent=user_agent,
         )
 
 
@@ -121,9 +130,9 @@ class Entry:
     created_at: Optional[str] = None  # formatted creation date/time
 
 
-def parse_rss_entries(feed_url, base_url=None):
+def parse_rss_entries(feed_url, base_url=None, user_agent=DEFAULT_USER_AGENT):
     """Parse RSS/Atom feed into normalized entries."""
-    d = feedparser.parse(feed_url)
+    d = feedparser.parse(feed_url, agent=user_agent)
     entries = []
     for e in d.entries[::-1]:
         link_href = _first(lnk['href'] for lnk in e.links if lnk.type == "text/html")
@@ -161,11 +170,15 @@ def parse_rss_entries(feed_url, base_url=None):
     return entries
 
 
-def parse_api_entries(feed_url, base_url=None):
+def parse_api_entries(feed_url, base_url=None, user_agent=DEFAULT_USER_AGENT):
     """Parse JSON API feed into normalized entries.
     Expected format: { "data": { "items": [ ... ] } }
     """
-    res = requests.get(feed_url, timeout=30)
+    headers = {
+        "User-Agent": user_agent,
+        "Accept": "application/json, text/plain, */*",
+    }
+    res = requests.get(feed_url, headers=headers, timeout=30)
     res.raise_for_status()
     data = res.json()
 
@@ -220,9 +233,9 @@ class FeedBot:
             logger.info("Checking feed [%s]: %s", feed.feed_type, feed.feed_url)
             try:
                 if feed.feed_type == "api":
-                    entries = parse_api_entries(feed.feed_url, feed.base_url)
+                    entries = parse_api_entries(feed.feed_url, feed.base_url, self.config.user_agent)
                 else:
-                    entries = parse_rss_entries(feed.feed_url, feed.base_url)
+                    entries = parse_rss_entries(feed.feed_url, feed.base_url, self.config.user_agent)
 
                 for entry in entries:
                     self.notify(feed, entry)

@@ -70,8 +70,15 @@ BOT_TOKEN = cfg.get("bot_token", os.getenv("BOT_TOKEN", ""))
 MONGODB_URI = cfg.get("mongodb_uri", os.getenv("MONGODB_URI", ""))
 
 # Bot config
-API_BASE_URL = cfg.get("api_base_url", os.getenv("API_BASE_URL", "https://xapi/public/search-anime"))
-VIEW_BASE_URL = cfg.get("view_base_url", os.getenv("VIEW_BASE_URL", "https://xxxxx/"))
+API_BASE_URL = cfg.get("api_base_url", os.getenv("API_BASE_URL", ""))
+VIEW_BASE_URL = cfg.get("view_base_url", os.getenv("VIEW_BASE_URL", ""))
+USER_AGENT = cfg.get(
+    "user_agent",
+    os.getenv(
+        "USER_AGENT",
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
+    )
+)
 FORCE_SUB_CHANNEL = cfg.get("force_sub_channel", os.getenv("FORCE_SUB_CHANNEL", ""))
 # Admin IDs (normalized to integers)
 raw_admin_ids = cfg.get("admin_ids", [])
@@ -264,7 +271,12 @@ async def check_force_sub(client, message):
 def search_anime(query: str):
     try:
         params = {"query": query}
-        response = requests.get(API_BASE_URL, params=params, timeout=15)
+        headers = {
+            "User-Agent": USER_AGENT,
+            "Accept": "application/json, text/plain, */*",
+            "Accept-Language": "en-US,en;q=0.9",
+        }
+        response = requests.get(API_BASE_URL, params=params, headers=headers, timeout=15)
         response.raise_for_status()
         return response.json()
     except Exception as e:

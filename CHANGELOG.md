@@ -29,6 +29,7 @@ Refactored all three services (`tg-comment`, `anisearch`, `mongosync`) to decoup
 - **Search Result Pagination** — Implemented 5-item page navigation (`◀️ Prev`, `1/N`, `Next ▶️`, `❌ Close`) with in-place message updates for multi-result anime queries.
 - **Surprise Me / Random Anime** — Added `/random` command and `🎲 Roll Another Anime` callback button with rotating seed pools to instantly roll random anime recommendations.
 - **Interactive Admin Dashboard & Live Controls** — Upgraded `/stats` and added `/admin` with `🔄 Refresh Stats` button and `⚙️ Live Settings` control panel to toggle `Force Sub` and `Group Text Search` in-memory on the fly.
+- **Configurable User-Agent for HTTP Requests** — Added realistic browser User-Agent headers (defaulting to modern Chrome desktop) across `anisearch/anidlsearch.py` and `tg-comment/anidl.py` (both `feedparser` and `requests`), preventing 403 Forbidden errors or Cloudflare blocks on external APIs and feeds.
 
 ### Changed
 - **Streamlined `/start` Welcome Message** — Removed inline search mention from the initial welcome text in `anisearch/anidlsearch.py` to keep the `/start` greeting clean and focused on direct searching.

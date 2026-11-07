@@ -5,6 +5,7 @@
     "mongodb_uri": "mongodb://localhost:27017",
     "api_base_url": "https://api.example.com/public/search-anime",
     "view_base_url": "https://example.com/",
+    "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
     "enable_force_sub": false,
     "force_sub_channel": "@channel_username",
     "admin_ids": [123456789],
