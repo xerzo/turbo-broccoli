@@ -7,6 +7,8 @@ services:
     container_name: tg-comment
     working_dir: /app/tg-comment
     command: ["python", "anidl.py"]
+    labels:
+      - "dev.dozzle.icon=telegram"
     volumes:
       - ./tg-comment/config.json:/app/tg-comment/config.json:ro
       - ./tg-comment/data:/app/tg-comment/data
@@ -29,6 +31,8 @@ services:
     container_name: tgsearch
     working_dir: /app/anisearch
     command: ["python", "anidlsearch.py"]
+    labels:
+      - "dev.dozzle.icon=telegram"
     volumes:
       - ./anisearch/config.json:/app/anisearch/config.json:ro
       - ./anisearch/session:/app/anisearch/session
@@ -51,6 +55,8 @@ services:
     container_name: python-mongo-sync
     working_dir: /app/mongosync
     command: ["python", "app.py"]
+    labels:
+      - "dev.dozzle.icon=mongodb"
     volumes:
       - ./mongosync/config.json:/app/mongosync/config.json:ro
       - ./mongosync/logs:/app/mongosync/logs

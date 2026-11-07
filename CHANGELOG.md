@@ -33,6 +33,7 @@ Refactored all three services (`tg-comment`, `anisearch`, `mongosync`) to decoup
 - **GitHub Actions CI/CD Image Publishing Workflow** — Added `.github/workflows/docker-build-push.yml` to automatically build, tag, and publish unified multi-service images to GitHub Container Registry (GHCR) with Buildx caching on push to `main` and release tags.
 - **Production Deployment Script (`deploy.sh`)** — Added automated update script that checks prerequisites, auto-provisions `tg_net` network, backs up state/database files, pulls updated images from GHCR, restarts services with zero downtime, and prunes unused images.
 - **Environment Configuration Template (`.env.example`)** — Added `.env.example` defining `IMAGE_TAG` pointing to GHCR container images.
+- **Dozzle Dashboard Container Icons** — Added `dev.dozzle.icon` labels to all services in `docker-compose.yml` (`telegram` for `tg-comment` and `anisearch`, `mongodb` for `mongosync`), displaying branded icons in Dozzle log dashboards.
 
 ### Changed
 - **Dynamic Image Tagging in `docker-compose.yml`** — Configured services to reference `image: ${IMAGE_TAG:-dockerize:latest}` with fallback to local `build:`, enabling instant image pulling in production while preserving local build capability.
