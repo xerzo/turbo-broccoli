@@ -63,7 +63,14 @@ MONGODB_URI = cfg.get("mongodb_uri", os.getenv("MONGODB_URI", ""))
 API_BASE_URL = cfg.get("api_base_url", os.getenv("API_BASE_URL", "https://xapi/public/search-anime"))
 VIEW_BASE_URL = cfg.get("view_base_url", os.getenv("VIEW_BASE_URL", "https://xxxxx/"))
 FORCE_SUB_CHANNEL = cfg.get("force_sub_channel", os.getenv("FORCE_SUB_CHANNEL", ""))
-ADMIN_IDS = cfg.get("admin_ids", [])
+# Admin IDs (normalized to integers)
+raw_admin_ids = cfg.get("admin_ids", [])
+ADMIN_IDS = []
+for aid in raw_admin_ids:
+    try:
+        ADMIN_IDS.append(int(aid))
+    except (ValueError, TypeError):
+        pass
 
 # Channel subscription settings
 ENABLE_FORCE_SUB = cfg.get("enable_force_sub", False)
@@ -171,11 +178,20 @@ async def get_user_count():
     return await users_collection.count_documents({})
 
 async def get_all_user_ids():
-    """Get all user IDs for broadcast"""
+    """Get all user IDs for broadcast (excluding banned users and admins)"""
     if users_collection is None:
         return []
-    cursor = users_collection.find({"is_banned": False}, {"user_id": 1})
-    return [doc["user_id"] async for doc in cursor]
+    admin_set = set(ADMIN_IDS)
+    query = {"is_banned": False}
+    if ADMIN_IDS:
+        query["user_id"] = {"$nin": ADMIN_IDS}
+    cursor = users_collection.find(query, {"user_id": 1})
+    return [
+        doc["user_id"]
+        async for doc in cursor
+        if doc.get("user_id") is not None
+        and int(doc.get("user_id", 0)) not in admin_set
+    ]
 
 async def is_user_banned(user_id: int) -> bool:
     """Check if user is banned"""
@@ -656,6 +672,14 @@ async def broadcast_command(client, message):
         send_method = "text"
     
     # Confirmation
+    target_users = await get_all_user_ids()
+    if not target_users:
+        await message.reply_text(
+            "ℹ️ No eligible non-admin users found in database to broadcast to.",
+            parse_mode=ParseMode.HTML
+        )
+        return
+
     confirm_kb = InlineKeyboardMarkup([
         [
             InlineKeyboardButton("✅ Yes, Broadcast", callback_data="broadcast_confirm"),
@@ -665,7 +689,7 @@ async def broadcast_command(client, message):
     
     confirm_msg = await message.reply_text(
         f"⚠️ <b>Confirm Broadcast</b>\n\n"
-        f"📤 Send to: <code>{await get_user_count()}</code> users\n"
+        f"📤 Send to: <code>{len(target_users)}</code> users (excluding admins)\n"
         f"📝 Content: <i>{content if isinstance(content, str) else 'Reply message'}</i>",
         reply_markup=confirm_kb,
         parse_mode=ParseMode.HTML
@@ -711,6 +735,13 @@ async def execute_broadcast(client, status_message, content, send_method):
     """Execute batched broadcast with live progress updates."""
     user_ids = await get_all_user_ids()
     total = len(user_ids)
+    if total == 0:
+        try:
+            await status_message.edit_text("ℹ️ No eligible non-admin users found to broadcast to.")
+        except Exception:
+            pass
+        return
+
     success = 0
     blocked = 0
     failed = 0
